@@ -1,0 +1,230 @@
+---
+title: PTAPP 2017, IAAO SURVEY
+output: 
+  html_document:
+    toc: true
+    toc_float: true
+    number_sections: true
+    theme: readable
+---
+# Introduction
+
+Hi, welcome to PTAPP! Currently would need to differentiate the two Hawaii answers as separate jurisdictions, due to jurisdiction_name values.
+
+```{r setup, include=FALSE} 
+# Remove warnings from outputting to consumer
+knitr::opts_chunk$set(warning = FALSE, message = FALSE) 
+```
+
+```{r, echo = F, include = F}
+# necessary packages
+library(DBI)
+library(odbc)
+library(dplyr)
+library(ggplot2)
+library(tidyr)
+library(config)
+library(Rcpp)
+library(rmarkdown)
+library(knitr)
+library(kableExtra)
+library(rgdal)
+library(leaflet)
+library(plotly)
+library(leaflet.extras)
+#_________ Ingest data 
+# # connect to database
+# source('functions.R')
+# having trouble with connections on my current local PC; tabling this and opting for text file in this demo
+importedPtapp <- read.table('ptapp_data.txt', header = T, sep = "\t")
+
+#_________ Clean data
+ptapp <- importedPtapp %>% rename(Response = response) %>% rename(Question = sub_question) %>% rename(Jurisdiction = jurisdiction_name)
+is.na(ptapp) <- ptapp == 'NULL'
+
+#________ Choropleth setup from https://r-graph-gallery.com/183-choropleth-map-with-leaflet.html
+# Download the shapefile. (note that I store it in a folder called DATA. You have to change that if needed.)
+# download.file("http://thematicmapping.org/downloads/TM_WORLD_BORDERS_SIMPL-0.3.zip" , destfile="world_shape_file.zip")
+# You now have it in your current working directory, have a look!
+
+#  -- > You now have 4 files. One of these files is a .shp file! (TM_WORLD_BORDERS_SIMPL-0.3.shp)
+# Read this shape file with the rgdal library. 
+world_spdf <- readOGR( 
+  dsn= paste0(getwd(),"/world_shape_file") , 
+  layer="TM_WORLD_BORDERS_SIMPL-0.3",
+  verbose=FALSE
+)
+
+# Fake participation indicator for choropleth proof of concept:
+world_spdf@data <- world_spdf@data %>% dplyr::mutate(participation = dplyr::case_when(
+  NAME == 'Canada' ~ 1,
+  NAME == 'United States' ~ 1,
+  NAME == 'China' ~ 1,
+  NAME == 'United Kingdom' ~ 1,
+  NAME == 'South Korea' ~ 1,
+  NAME == 'Netherlands' ~ 1,
+  NAME == 'South Africa' ~ 1,
+  T ~ NA_real_
+))
+
+world_spdf@data <- world_spdf@data %>% dplyr::mutate(participationNames = dplyr::case_when(
+ participation == 1 ~ NAME,
+ T ~ ''
+))
+
+myParticipationPalette <- colorNumeric("darkred", domain = world_spdf@data$participation, na.color = 'transparent')
+```
+
+# International Representativeness
+Great turnout internationally this year. 
+
+```{r, echo = F}
+map <- leaflet::leaflet(data = world_spdf) %>% addTiles() %>% addPolygons(fillColor = ~myParticipationPalette(participation), stroke = F, fillOpacity = 0.8, label = world_spdf@data$participationNames) %>% leaflet.extras::addFullscreenControl()
+map
+```
+
+# Question 1
+```{r, echo = F}
+#______ Question 1
+# Grab only question 1 rows
+q1 <- ptapp %>% dplyr::filter(question_num == 1)
+# Obtain columns for graphics
+if(!is.na(q1$Question[1])) {
+  q1_data <- q1 %>% select(c("Jurisdiction", "Question", "Response"))
+} else {
+ q1_data <- q1 %>% select(c("Jurisdiction", "Response"))
+}
+# Obtain Question Description programmatically for reproducibility + header
+q1_header <- q1 %>% dplyr::select(question_desc) %>% unique()
+# Table
+knitr::kable(x = q1_data, format = 'html', row.names = T, caption = q1_header) %>% kableExtra::kable_paper() %>% kable_styling(bootstrap_options = c("striped", "hover", "condensed", "responsive")) %>% scroll_box(width = '100%', height = '350px')
+``` 
+
+## Comments
+More responses than received in 2012's edition of PTAPP.
+
+# Question 2
+```{r, echo = F}
+#______ Question 2
+# Grab only question 2 rows
+q2 <- ptapp %>% dplyr::filter(question_num == 2)
+# Obtain columns for graphics
+if(!is.na(q2$Question[1])) {
+  q2_data <- q2 %>% select(c("Jurisdiction", "Question", "Response"))
+} else {
+ q2_data <- q2 %>% select(c("Jurisdiction", "Response"))
+}
+# Obtain Question Description programmatically for reproducibility + header
+q2_header <- q2 %>% dplyr::select(question_desc) %>% unique()
+# Table
+knitr::kable(x = q2_data, format = 'html', row.names = T, caption = q2_header) %>% kableExtra::kable_paper() %>% kable_styling(bootstrap_options = c("striped", "hover", "condensed", "responsive")) %>% scroll_box(width = '100%', height = '350px')
+```
+
+## Comments
+Placeholder text.
+
+# Question 3
+```{r, echo = F}
+#______ Question 3
+# Grab only question 3 rows
+q3 <- ptapp %>% dplyr::filter(question_num == 3)
+# Obtain columns for graphics
+if(!is.na(q3$Question[1])) {
+  q3_data <- q3 %>% select(c("Jurisdiction", "Question", "Response"))
+} else {
+ q3_data <- q3 %>% select(c("Jurisdiction", "Response"))
+}
+# Obtain Question Description programmatically for reproducibility + header
+q3_header <- q3 %>% dplyr::select(question_desc) %>% unique()
+# Table
+knitr::kable(x = q3_data, format = 'html', row.names = T, caption = q3_header) %>% kableExtra::kable_paper() %>% kable_styling(bootstrap_options = c("striped", "hover", "condensed", "responsive"))  %>% scroll_box(width = '100%', height = '350px')
+```
+## Comments
+Placeholder text.
+
+# Question 4
+
+Complete response data listed in the table below.
+
+```{r, echo = F}
+#______ Question 4
+# Grab only question 4 rows
+q4 <- ptapp %>% dplyr::filter(question_num == 4)
+# Obtain columns for graphics
+if(!is.na(q4$Question[1])) {
+  q4_data <- q4 %>% select(c("Jurisdiction", "Question", "Response"))
+
+} else {
+ q4_data <- q4 %>% select(c("Jurisdiction", "Response"))
+}
+# Obtain Question Description programmatically for reproducibility + header
+q4_header <- q4 %>% dplyr::select(question_desc) %>% unique()
+# Table
+knitr::kable(x = q4_data, format = 'html', row.names = T, caption = q4_header) %>% kableExtra::kable_paper() %>% kable_styling(bootstrap_options = c("striped", "hover", "condensed", "responsive")) %>% scroll_box(width = '100%', height = '350px')
+```
+
+```{r, echo = F}
+q4_hist_data <- q4_data %>% filter(Question == 'Size Status')
+q4_hist <- ggplot2::ggplot(q4_hist_data, aes(Response)) + ggplot2::geom_histogram(stat = "count", position = "stack", binwidth = 1) + theme_minimal() + ggplot2::ggtitle(q4_hist_data$Question)
+q4_hist
+```
+
+Demonstrations of ggplot2 vs plotly for same data:
+
+```{r, echo = F}
+q4_freq_data <- q4_data %>% filter(Question == 'Number of staff members in the office')
+q4_freq <- ggplot2::ggplot(q4_freq_data, aes(Jurisdiction,as.numeric(Response))) + ggplot2::geom_col() + theme_minimal() + ggplot2::ggtitle(q4_freq_data$Question) + ylab('Number of Staff') + theme(axis.text.x = element_text(angle = 45, vjust = 0.5, hjust = 1)) 
+q4_freq
+
+q4_freq_plotly = plotly::plot_ly(
+  x = q4_freq_data$Jurisdiction,
+  y = as.numeric(q4_freq_data$Response),
+  type = 'bar'
+) %>% 
+  layout(title = q4_freq_data$Question, xaxis = list(title = 'Jurisdiction'), yaxis = list(title = 'Staff Count'))
+
+q4_freq_plotly
+```
+
+## Comments
+Placeholder text. Notice the plotly vs ggplot2 graph differences (plotly is interactive). There is concern bundling many plotlys as their interactivity may slow down the document. Effects here are TBD.
+
+
+# Question 5
+
+Raw data:
+
+```{r, echo = F}
+#______ Question 5
+# Grab only question 5 rows
+q5 <- ptapp %>% dplyr::filter(question_num == 5)
+# Obtain columns for graphics
+if(!is.na(q5$Question[1])) {
+  q5_data <- q5 %>% select(c("Jurisdiction", "Question", "Response", "question_desc"))
+
+} else {
+ q5_data <- q5 %>% select(c("Jurisdiction", "Response"))
+}
+# Obtain Question Description programmatically for reproducibility + header
+q5_header <- q5 %>% dplyr::select(question_desc) %>% unique()
+# Table
+knitr::kable(x = q5_data, format = 'html', row.names = T, caption = q5_header) %>% kableExtra::kable_paper() %>% kable_styling(bootstrap_options = c("striped", "hover", "condensed", "responsive")) %>% scroll_box(width = '100%', height = '350px')
+```
+
+Distribution of Answers to each Sub Question:
+
+```{r, echo = F}
+q5_hist_func <- function(x) { 
+  q5_hist <- ggplot2::ggplot(filter(q5_data, q5_data$Question == x), aes(Response)) + ggplot2::geom_bar() + theme_minimal() + ggplot2::labs(title = q5_data$question_desc, subtitle = x)
+  return(q5_hist)
+  }
+  
+lapply(unique(q5_data$Question), q5_hist_func)
+
+#   
+# for (entry in 1:length(unique(q5_data$Question))) {
+#   q5_data <- q5_data %>% filter(q5_data$Question == unique(q5_data$Question)[entry])
+#   q5_hist_func(q5_data$Question)
+# }
+
+```
