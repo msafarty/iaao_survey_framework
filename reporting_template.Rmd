@@ -32,9 +32,12 @@ library(rgdal)
 library(leaflet)
 library(plotly)
 library(leaflet.extras)
+library(DT)
+library(stringr)
+library(geojsonio)
 #_________ Ingest data 
 # # connect to database
-# source('functions.R')
+source('functions.R') # to grab the histogram generator function
 # having trouble with connections on my current local PC; tabling this and opting for text file in this demo
 importedPtapp <- read.table('ptapp_data.txt', header = T, sep = "\t")
 
@@ -73,15 +76,101 @@ world_spdf@data <- world_spdf@data %>% dplyr::mutate(participationNames = dplyr:
 ))
 
 myParticipationPalette <- colorNumeric("darkred", domain = world_spdf@data$participation, na.color = 'transparent')
+
+# State geojson download for sample US map (probably not realistic - would need an international map with canadian provinces, us states, etc.)
+states <- geojsonio::geojson_read("https://rstudio.github.io/leaflet/json/us-states.geojson", what = "sp")
+
 ```
 
 # International Representativeness
 Great turnout internationally this year. 
 
 ```{r, echo = F}
-map <- leaflet::leaflet(data = world_spdf) %>% addTiles() %>% addPolygons(fillColor = ~myParticipationPalette(participation), stroke = F, fillOpacity = 0.8, label = world_spdf@data$participationNames) %>% leaflet.extras::addFullscreenControl()
+map <- leaflet::leaflet(data = world_spdf) %>% addTiles() %>% addPolygons(fillColor = ~myParticipationPalette(participation), stroke = F, fillOpacity = 0.8, label = world_spdf@data$participationNames) %>% leaflet.extras::addFullscreenControl() %>% leaflet::setMaxBounds(lng1 = -180, lng2 = 180, lat1 = -90, lat2 = 90) %>% leaflet::setView( lat=0, lng=0 , zoom=1.25)
 map
 ```
+
+# Survey Limitations
+Just as an example to tie data into the choropleth, since the international map did not coincide with the national US state jurisdictions pulled as example data for this exercise.
+
+This map colors the jurisdiction polygons by the number of total questions & nested sub-questions responded to.
+
+```{r, echo = F}
+ptapp_state_join <- ptapp %>% group_by(Jurisdiction) %>% summarize(num_responses = sum(responded_to)) %>% rename(name = Jurisdiction)
+
+statesForMap <- merge(states,ptapp_state_join, by.x = 'name')
+bins <- c(0, 25, 35, 40, 45, 55, 60, 65, Inf)
+pal <- colorBin("YlOrRd", domain = statesForMap$num_responses, bins = bins)
+labels <- paste0(
+  statesForMap$name, "<br/> Num. Unique Question Responses: ", statesForMap$num_responses
+) %>% lapply(htmltools::HTML)
+
+m <- leaflet(statesForMap) %>%
+  setView(-96, 37.8, 3) %>%
+  addTiles() %>% addPolygons(fillColor = ~pal(num_responses), weight = 2, opacity = 1, color = 'white', dashArray = 3, fillOpacity = 0.7,highlightOptions = highlightOptions(
+    weight = 5,
+    color = "#666",
+    dashArray = "",
+    fillOpacity = 0.7,
+    bringToFront = TRUE),
+    label = labels,
+  labelOptions = labelOptions(
+    style = list("font-weight" = "normal", padding = "3px 8px"),
+    textsize = "15px",
+    direction = "auto")) %>% addLegend(pal = pal, values = ~density, opacity = 0.7, title = 'Num. Responses',
+  position = "bottomright")
+
+m
+```
+
+Below is a table of the number of missing responses per question. If one question had 10 nested questions, and one jurisdiction did not answer, that equates to 10 missing responses. For this exercise, responded_to = 0 was randomly assigned and not translated from IAAO's true PTAPP 2017 data.
+
+```{r, echo = F}
+no_responses <- ptapp %>% filter(responded_to == 0) %>% group_by(question_num) %>% rename(`Question Number` = question_num) %>% summarize(`Number of Missing Responses` = n())
+
+# Table
+knitr::kable(x = no_responses, format = 'html', row.names = F, caption = 'Count of Unanswered Questions, Multiplied by Num. Sub Questions') %>% kableExtra::kable_paper() %>% kable_styling(bootstrap_options = c("striped", "hover", "condensed", "responsive")) %>% scroll_box(width = '100%', height = '100%')
+```
+
+```{r, echo = F, include = F}
+## Data Map
+#All responses embedded into map's polygons is a great idea but would best be managed through ESRI or open-source technology dedicated to such representations. This was running into issues with SPDF type objects and it did not feel productive or clean to widen question-subquestion responses into new columns.
+
+
+# ptapp_state_join2 <- ptapp %>%  select(c(Jurisdiction, question_num, question_desc, Question, Response)) %>% rename(name = Jurisdiction)
+# 
+# statesForMap <- merge(states,ptapp_state_join2, by.x = 'name', duplicateGeoms = T)
+# 
+# 
+# labs <- lapply(seq(nrow(statesForMap)), function(i) {
+#   paste0( '<p>', statesForMap[i, "name"], '<p></p>', 
+#           statesForMap[i, "question_num"], ', ', 
+#           statesForMap[i, "question_desc"],'</p><p>', 
+#           statesForMap[i, "Question"],
+#           statesForMap[i, "Response"], '<br/>',
+#           '</p>' ) 
+# })
+# 
+# 
+# 
+# 
+# m <- leaflet(statesForMap) %>%
+#   setView(-96, 37.8, 3) %>%
+#   addTiles() %>% addPolygons(fillColor = 'darkblue', weight = 2, opacity = 1, color = 'white', dashArray = 3, fillOpacity = 0.7,highlightOptions = highlightOptions(
+#     weight = 5,
+#     color = "#666",
+#     dashArray = "",
+#     fillOpacity = 0.7,
+#     bringToFront = TRUE),
+#     label = labels,
+#   labelOptions = labelOptions(
+#     style = list("font-weight" = "normal", padding = "3px 8px"),
+#     textsize = "15px",
+#     direction = "auto"))
+# 
+# m
+```
+
 
 # Question 1
 ```{r, echo = F}
@@ -211,20 +300,169 @@ q5_header <- q5 %>% dplyr::select(question_desc) %>% unique()
 knitr::kable(x = q5_data, format = 'html', row.names = T, caption = q5_header) %>% kableExtra::kable_paper() %>% kable_styling(bootstrap_options = c("striped", "hover", "condensed", "responsive")) %>% scroll_box(width = '100%', height = '350px')
 ```
 
-Distribution of Answers to each Sub Question:
+The following graphs display the response distribution of the `r length(unique(q5_data$Question))` Sub Questions for Question `r q5$question_num[1]`. 
 
 ```{r, echo = F}
-q5_hist_func <- function(x) { 
-  q5_hist <- ggplot2::ggplot(filter(q5_data, q5_data$Question == x), aes(Response)) + ggplot2::geom_bar() + theme_minimal() + ggplot2::labs(title = q5_data$question_desc, subtitle = x)
-  return(q5_hist)
-  }
-  
-lapply(unique(q5_data$Question), q5_hist_func)
 
-#   
-# for (entry in 1:length(unique(q5_data$Question))) {
-#   q5_data <- q5_data %>% filter(q5_data$Question == unique(q5_data$Question)[entry])
-#   q5_hist_func(q5_data$Question)
-# }
+for (entry in 1:length(unique(q5_data$Question))) {
+  q5_data_hist <- q5_data %>% filter(Question == unique(Question)[entry])
+  hist_func(q5_data_hist)
+}
 
 ```
+
+## Comments
+Wow, great job people!
+
+
+# Question 6
+Complete response data listed in the table below.
+
+```{r, echo = F}
+#______ Question 6
+# Grab only question 6 rows
+q6 <- ptapp %>% dplyr::filter(question_num == 6)
+# Obtain columns for graphics
+if(!is.na(q6$Question[1])) {
+  q6_data <- q6 %>% select(c("Jurisdiction", "Question", "Response"))
+
+} else {
+ q6_data <- q6 %>% select(c("Jurisdiction", "Response"))
+}
+# Obtain Question Description programmatically for reproducibility + header
+q6_header <- q6 %>% dplyr::select(question_desc) %>% unique()
+# Numeric Response, so convert it:
+q6_data$Response <- as.numeric(q6_data$Response)
+# Table
+knitr::kable(x = q6_data, format = 'html', row.names = T, caption = q6_header, format.args = list( big.mark = ",")) %>% kableExtra::kable_paper() %>% kable_styling(bootstrap_options = c("striped", "hover", "condensed", "responsive")) %>% scroll_box(width = '100%', height = '350px')
+```
+
+## Comments
+Lots of parcels. 
+
+# Question 7
+Complete response data listed in the table below. This uses the datatable/DT framework rather than kable framework for tables. Note the differences.
+
+```{r, echo = F}
+#______ Question 7
+# Grab only question 7 rows
+q7 <- ptapp %>% dplyr::filter(question_num == 7)
+# Obtain columns for graphics
+if(!is.na(q7$Question[1])) {
+  q7_data <- q7 %>% select(c("Jurisdiction", "Question", "Response"))
+
+} else {
+ q7_data <- q7 %>% select(c("Jurisdiction", "Response"))
+}
+# Obtain Question Description programmatically for reproducibility + header
+q7_header <- q7 %>% dplyr::select(question_desc) %>% unique()
+# Numeric Response, so convert it:
+q7_data$Response <- as.numeric(q7_data$Response) %>% format(big.mark=',')
+# Table
+DT::datatable(q7_data, 
+              options = list(pageLength = 20, scrollX = T, scrollY = T, order = list(list(1, 'desc'))), 
+              class = 'cell-border stripe',
+              caption = htmltools::tags$caption(
+              style = 'caption-side: top; text-align: center;',
+              q7_header),
+              rownames = F)
+```
+
+## Comments
+Poor response rate for this question. Does this imply a lack of personal property in the equalization process for these jurisdictions?
+
+# Question 8
+Complete response data listed in the table below.
+
+```{r, echo = F}
+#______ Question 8
+# Grab only question 8 rows
+q8 <- ptapp %>% dplyr::filter(question_num == 8)
+# Obtain columns for graphics
+if(!is.na(q8$Question[1])) {
+  q8_data <- q8 %>% select(c("Jurisdiction", "Question", "Response"))
+
+} else {
+ q8_data <- q8 %>% select(c("Jurisdiction", "Response"))
+}
+# Obtain Question Description programmatically for reproducibility + header
+q8_header <- q8 %>% dplyr::select(question_desc) %>% unique()
+# Table
+knitr::kable(x = q8_data, format = 'html', caption = q8_header, row.names = T) %>% kableExtra::kable_paper() %>% kable_styling(bootstrap_options = c("striped", "hover", "condensed", "responsive")) %>% scroll_box(width = '100%', height = '350px')
+```
+
+The following graphs display the response distribution of the `r length(unique(q8_data$Question))` Sub Questions for Question `r q8$question_num[1]`. 
+
+```{r, echo = F}
+for (entry in 1:length(unique(q8_data$Question))) {
+  q8_data_hist <- q8_data %>% filter(Question == unique(Question)[entry])
+  hist_func(q8_data_hist)
+}
+```
+
+## Comments
+Lorem ipsum
+
+# Question 9
+Complete response data listed in the table below.
+
+```{r, echo = F}
+#______ Question 9
+# Grab only question 9 rows
+q9 <- ptapp %>% dplyr::filter(question_num == 9)
+# Obtain columns for graphics
+if(!is.na(q9$Question[1])) {
+  q9_data <- q9 %>% select(c("Jurisdiction", "Question", "Response"))
+
+} else {
+ q9_data <- q9 %>% select(c("Jurisdiction", "Response"))
+}
+# Obtain Question Description programmatically for reproducibility + header
+q9_header <- q9 %>% dplyr::select(question_desc) %>% unique()
+# Table
+knitr::kable(x = q9_data, format = 'html', caption = q9_header, row.names = T) %>% kableExtra::kable_paper() %>% kable_styling(bootstrap_options = c("striped", "hover", "condensed", "responsive")) %>% scroll_box(width = '100%', height = '350px')
+```
+
+The following graphs display the response distribution of the `r length(unique(q9_data$Question))` Sub Questions for Question `r q9$question_num[1]`. 
+
+```{r, echo = F}
+for (entry in 1:length(unique(q9_data$Question))) {
+  q9_data_hist <- q9_data %>% filter(Question == unique(Question)[entry])
+  hist_func(q9_data_hist)
+}
+```
+
+## Comments
+Lorem ipsum
+
+# Question 10
+Complete response data listed in the table below.
+
+```{r, echo = F}
+#______ Question 10
+# Grab only question 10 rows
+q10 <- ptapp %>% dplyr::filter(question_num == 10)
+# Obtain columns for graphics
+if(!is.na(q10$Question[1])) {
+  q10_data <- q10 %>% select(c("Jurisdiction", "Question", "Response"))
+
+} else {
+ q10_data <- q10 %>% select(c("Jurisdiction", "Response"))
+}
+# Obtain Question Description programmatically for reproducibility + header
+q10_header <- q10 %>% dplyr::select(question_desc) %>% unique()
+# Table
+knitr::kable(x = q10_data, format = 'html', caption = q10_header, row.names = T) %>% kableExtra::kable_paper() %>% kable_styling(bootstrap_options = c("striped", "hover", "condensed", "responsive")) %>% scroll_box(width = '100%', height = '350px')
+```
+
+The following graphs display the response distribution of the `r length(unique(q10_data$Question))` Sub Questions for Question `r q10$question_num[1]`. 
+
+```{r, echo = F}
+for (entry in 1:length(unique(q10_data$Question))) {
+  q10_data_hist <- q10_data %>% filter(Question == unique(Question)[entry])
+  hist_func(q10_data_hist)
+}
+```
+
+## Comments
+Lorem ipsum
